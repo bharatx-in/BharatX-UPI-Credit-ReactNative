@@ -51,7 +51,7 @@ export const initiateTransaction = async (qrData: string, amount: number) => {
         })
     });
     const resB = await res.json();
-    return { initiated: resB.merchantTransactionId!!, transactionId: resB.merchantTransactionId };
+    return { initiated: !!resB.merchantTransactionId, transactionId: resB.merchantTransactionId };
 };
 
 export const checkTransactionStatus = async (transactionId: string) => {

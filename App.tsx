@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import OTPInputView from '@twotalltotems/react-native-otp-input';
-import { checkTransactionStatus, getUserRegistrationStatus, initiateTransaction, verifyOTP } from './Api';
+import { checkTransactionStatus, getUserRegistrationStatus, initiateTransaction, requestOTP, verifyOTP } from './Api';
 import QRCodeScanner from 'react-native-qrcode-scanner';
 import { RNCamera } from 'react-native-camera';
 
@@ -32,7 +32,7 @@ const App = () => {
   const isDarkMode = useColorScheme() === 'dark';
   const [page, setPage] = useState<string>("home");
   const [otp, setOtp] = useState<string>("123456");
-  const [upiCode, setUpiCode] = useState<string>("");
+  const [qrRawData, setUpiCode] = useState<string>("");
   const [payeeName, setPayeeName] = useState<string>("");
   const [payeeVPA, setPayeeVPA] = useState<string>("");
   const [amount, setAmount] = useState<number>(0);
@@ -55,41 +55,23 @@ const App = () => {
   }, []);
 
   const pollTransactionStatus = async () => {
-    while (true) {
-      const status = await checkTransactionStatus(transactionId);
-      switch (status) {
-        case "PENDING": {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          await pollTransactionStatus();
-          break;
-        }
-        case "SUCCESS": {
-          setPage("txn_successful");
-          break;
-        }
-        case "FAILURE": {
-          setPage("txn_failure");
-          break;
-        }
+    const status = await checkTransactionStatus(transactionId);
+    switch (status) {
+      case "PENDING": {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await pollTransactionStatus();
+        break;
+      }
+      case "SUCCESS": {
+        setPage("txn_successful");
+        break;
+      }
+      case "FAILURE": {
+        setPage("txn_failure");
+        break;
       }
     }
   };
-
-  useEffect(() => {
-    if (transactionId) {
-      setPage("txn_status_check");
-    }
-  }, [transactionId]);
-
-  useEffect(() => {
-    if (upiCode) {
-      const uri = new URL(upiCode);
-      setPayeeName(uri.searchParams.get("pn")!!);
-      setPayeeVPA(uri.searchParams.get("pa")!!);
-      setPage("amount_entry");
-    }
-  }, [upiCode]);
-  let e = null;
 
   const checkOtp = () => {
     (async () => {
@@ -104,7 +86,7 @@ const App = () => {
 
   const payToVpa = () => {
     (async () => {
-      const res = await initiateTransaction(upiCode, Math.ceil(amount * 100));
+      const res = await initiateTransaction(qrRawData, Math.ceil(amount * 100));
       console.log(JSON.stringify(res));
       if (res.initiated) {
         setTransactionId(res.transactionId);
@@ -116,7 +98,26 @@ const App = () => {
   };
 
   useEffect(() => {
+    if (transactionId) {
+      setPage("txn_status_check");
+    }
+  }, [transactionId]);
+
+  useEffect(() => {
+    if (qrRawData) {
+      const uri = new URL(qrRawData);
+      setPayeeName(uri.searchParams.get("pn")!!);
+      setPayeeVPA(uri.searchParams.get("pa")!!);
+      setPage("amount_entry");
+    }
+  }, [qrRawData]);
+  let e = null;
+
+  useEffect(() => {
     console.log(page);
+    if(page === "otp_request") {
+      requestOTP();
+    }
   }, [page]);
   useEffect(() => {
     if (otp.length === 6) {
@@ -148,7 +149,7 @@ const App = () => {
               console.log(`Code is ${code}, you are good to go!`);
               setOtp(code);
             })}
-            pinCount={4}
+            pinCount={6}
           />
           <Button title="Submit OTP" onPress={() => {
 
@@ -190,7 +191,7 @@ const App = () => {
           <Text>Paying to {payeeName}</Text>
           <Text>{payeeVPA}</Text>
           <TextInput keyboardType='numeric' placeholder='100.00'
-            value={(amount === 0) ? "" : amount.toString()} onChangeText={(v) => { (/\d+/.test(v)) ? setAmount(parseFloat(v)) : setAmount(0) }}></TextInput>
+            value={(amount === 0) ? "" : amount.toString()} onChangeText={(v) => { (/[\.\d]+/.test(v)) ? setAmount(parseFloat(v)) : setAmount(0) }}></TextInput>
           <Button title='Pay' onPress={payToVpa}></Button>
         </>
       );
